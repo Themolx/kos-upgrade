@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "KOS Upgrade – FAMU",
+  "version": "1.0.0",
+  "description": "Vylepšení KOS systému pro studenty FAMU – sudý/lichý týden, lepší rozvrh, navigace na předměty",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://kos.amu.cz/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://kos.amu.cz/*"],
+      "css": ["src/styles.css"],
+      "js": ["src/utils.js", "src/weekParity.js", "src/schedule.js", "src/scheduleEdit.js", "src/subjects.js", "src/syllabusArchive.js", "src/homepage.js", "src/main.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

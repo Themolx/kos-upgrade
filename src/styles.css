@@ -1,0 +1,473 @@
+/* KOS Upgrade – FAMU Edition */
+
+/* ── Week badge (header) ── */
+.kos-week-badge {
+  position: absolute; top: 50%; right: 16px; transform: translateY(-50%);
+  z-index: 10000; display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; font-family: system-ui, sans-serif;
+  font-size: 13px; font-weight: 600; cursor: default; user-select: none;
+}
+.kos-week-badge--odd { background: #e8f5e9; color: #2e7d32; }
+.kos-week-badge--even { background: #e3f2fd; color: #1565c0; }
+.kos-week-badge__number { opacity: 0.6; font-weight: 400; }
+
+/* ── Dashboard ── */
+.kos-dashboard {
+  padding: 8px 10px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 900px;
+}
+
+/* ── Top bar ── */
+.kos-topbar {
+  display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+  background: #fff; border: 1px solid #ccc;
+}
+.kos-topbar__date { font-size: 15px; font-weight: 600; color: #1a1a2e; }
+.kos-topbar__countdown { font-size: 12px; color: #666; flex: 1; text-align: center; }
+.kos-topbar__countdown--active { color: #c62828; font-weight: 600; }
+.kos-topbar__countdown--upcoming { color: #01747b; font-weight: 600; }
+.kos-topbar__week { font-size: 13px; font-weight: 700; padding: 3px 10px; margin-left: auto; }
+.kos-topbar__week--odd { background: #e8f5e9; color: #2e7d32; }
+.kos-topbar__week--even { background: #e3f2fd; color: #1565c0; }
+
+/* ── Card ── */
+.kos-card { background: #fff; border: 1px solid #ccc; overflow: hidden; }
+.kos-card__header {
+  padding: 5px 12px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: #fff; background: #01747b;
+}
+.kos-card__header--clickable { cursor: pointer; }
+.kos-card__header--clickable:hover { background: #015a5f; }
+.kos-card__body { padding: 8px 10px; }
+.kos-card__body--flush { padding: 0; }
+
+/* ── Mini schedule grid ── */
+.kos-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.kos-grid__row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #f0f0f0;
+  min-height: 34px;
+}
+
+.kos-grid__row:last-child { border-bottom: none; }
+
+.kos-grid__row--header {
+  background: #f8f8f8;
+  min-height: 20px;
+  font-size: 10px;
+  color: #999;
+}
+
+.kos-grid__row--today {
+  background: rgba(1, 116, 123, 0.03);
+}
+
+.kos-grid__daycell {
+  width: 28px;
+  min-width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  border-right: 1px solid #eee;
+  padding: 2px;
+}
+
+.kos-grid__daycell--today {
+  background: #01747b;
+  color: #fff;
+}
+
+.kos-grid__hourcell {
+  flex: 1;
+  text-align: center;
+  border-right: 1px solid #f5f5f5;
+  padding: 2px 0;
+}
+
+.kos-grid__track {
+  flex: 1;
+  display: grid;
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+  position: relative;
+  min-height: 34px;
+  overflow: hidden;
+}
+
+.kos-grid__hourline {
+  grid-row: 1;
+  border-left: 1px solid #f0f0f0;
+  pointer-events: none;
+}
+
+.kos-grid__block {
+  grid-row: 1;
+  position: relative;
+  background: #CCEEFF;
+  border: 1px solid #99ccdd;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  padding: 2px 5px;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 1;
+  min-height: 30px;
+}
+
+.kos-grid__block--today {
+  background: #b3e0ff;
+  border-color: #66b3e0;
+}
+
+.kos-grid__block--dim {
+  opacity: 0.25;
+}
+
+.kos-grid__block-time {
+  font-size: 8px;
+  color: #555;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+.kos-grid__block-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+.kos-grid__block-hide {
+  position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff;
+  border: none; font-size: 10px; line-height: 1; padding: 1px 3px; cursor: pointer;
+  opacity: 0; transition: opacity 0.15s; z-index: 2;
+}
+.kos-grid__block:hover .kos-grid__block-hide { opacity: 1; }
+.kos-grid__block-hide:hover { background: #c00; }
+
+.kos-grid__block-room {
+  font-size: 9px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.kos-grid__block-parity {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 0 3px;
+  background: rgba(0,0,0,0.08);
+  color: #888;
+}
+
+.kos-grid__block-parity--active {
+  background: rgba(46, 125, 50, 0.15);
+  color: #2e7d32;
+}
+
+/* ── Bottom row ── */
+.kos-bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* ── Tags ── */
+.kos-tag {
+  font-size: 10px; font-weight: 700; padding: 1px 5px; white-space: nowrap;
+}
+.kos-tag--green { background: #e8f5e9; color: #2e7d32; }
+.kos-tag--orange { background: #fff3e0; color: #e65100; }
+.kos-tag--gray { background: #f0f0f0; color: #999; }
+
+/* ── Subjects ── */
+.kos-summary {
+  padding: 3px 0 6px; font-size: 11px; font-weight: 600;
+  color: #666; border-bottom: 1px solid #eee; margin-bottom: 2px;
+}
+
+.kos-subj-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 2px; font-size: 11px;
+  border-bottom: 1px solid #f8f8f8;
+}
+.kos-subj-row--clickable { cursor: pointer; }
+.kos-subj-row--clickable:hover { background: #f0f8f8; }
+.kos-subj-name { flex: 1; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kos-subj-credits { font-size: 10px; color: #888; min-width: 14px; text-align: right; }
+
+/* ── Modules ── */
+.kos-section-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  color: #999; letter-spacing: 0.3px; margin-top: 6px; margin-bottom: 3px;
+}
+.kos-section-label:first-child { margin-top: 0; }
+
+.kos-mod-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+  padding: 3px 5px; font-size: 11px;
+  border-left: 3px solid #ddd; margin-bottom: 2px; background: #fafafa;
+}
+.kos-mod-row--clickable { cursor: pointer; }
+.kos-mod-row--clickable:hover { background: #f0f8f8; }
+.kos-mod-row--urgent { border-left-color: #d32f2f !important; background: #fff5f5 !important; }
+.kos-mod-row--soon { border-left-color: #f57c00 !important; background: #fffde7 !important; }
+.kos-mod-date { font-size: 11px; font-weight: 700; color: #01747b; min-width: 60px; }
+.kos-mod-time { font-size: 10px; font-weight: 600; color: #666; min-width: 50px; }
+.kos-mod-name { flex: 1; min-width: 80px; color: #333; }
+.kos-mod-meta { font-size: 10px; color: #888; }
+.kos-mod-spots { font-size: 10px; color: #2e7d32; font-weight: 600; }
+.kos-mod-deadline { font-size: 10px; color: #e65100; font-weight: 600; }
+.kos-mod-deadline--urgent { color: #d32f2f !important; }
+.kos-mod-row--past { opacity: 0.35; }
+.kos-mod-row--past:hover { opacity: 0.6; }
+
+/* ── Nav (compact) ── */
+.kos-nav-compact {
+  display: flex; flex-wrap: wrap; gap: 0;
+  border: 1px solid #ccc; background: #fff;
+}
+.kos-nav-compact__link {
+  padding: 5px 12px; font-size: 11px;
+  color: #01747b !important; text-decoration: none !important;
+  border-right: 1px solid #eee;
+}
+.kos-nav-compact__link:last-child { border-right: none; }
+.kos-nav-compact__link:hover { background: #e3f2fd; }
+
+/* ── Misc ── */
+.kos-muted { color: #999; font-style: italic; font-size: 12px; }
+.kos-link { color: #01747b !important; text-decoration: none !important; font-weight: 600; font-size: 12px; }
+.kos-link:hover { text-decoration: underline !important; }
+
+.kos-cache-info {
+  font-size: 9px; color: #bbb; text-align: right;
+  padding: 3px 4px 1px; margin-top: 2px;
+}
+
+/* ── Schedule page ── */
+.kos-parity {
+  position: absolute; bottom: 2px; left: 2px; right: 2px;
+  font-size: 9px; font-weight: 600; padding: 1px 4px; text-align: center;
+  font-family: system-ui, sans-serif;
+}
+.kos-parity--active { background: rgba(46, 125, 50, 0.15); color: #2e7d32; }
+.kos-parity--inactive { background: rgba(0, 0, 0, 0.06); color: #999; }
+.kos-dimmed { opacity: 0.3 !important; }
+.kos-today-day { background: #e3f2fd !important; font-weight: 700 !important; }
+
+/* ── Subjects page ── */
+.kos-subjects-summary {
+  display: flex; gap: 10px; padding: 6px 10px;
+  background: #f0f0f0; border: 1px solid #ddd;
+  font-size: 12px; font-weight: 600; color: #333;
+  font-family: system-ui, sans-serif; margin-bottom: 4px;
+}
+.kos-subjects-summary__sep { color: #ccc; }
+
+/* ── Modules page ── */
+.kos-module-past { opacity: 0.3; }
+.kos-module-urgent-row { background: #fff5f5 !important; }
+.kos-module-soon-row { background: #fffde7 !important; }
+.kos-deadline-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; margin-left: 4px; }
+.kos-deadline-badge--urgent { background: #d32f2f; color: #fff; }
+.kos-deadline-badge--soon { background: #f57c00; color: #fff; }
+.kos-spots-low { color: #d32f2f !important; font-weight: 700 !important; }
+
+/* ── Schedule editor ── */
+.kos-edit-toolbar {
+  display: flex; gap: 8px; padding: 6px 0; margin-bottom: 4px;
+  font-family: system-ui, sans-serif;
+}
+.kos-edit-btn {
+  padding: 4px 12px; font-size: 11px; font-weight: 600;
+  background: #f0f0f0; border: 1px solid #ccc; cursor: pointer;
+  font-family: system-ui, sans-serif; color: #333;
+}
+.kos-edit-btn:hover { background: #e0e0e0; }
+.kos-edit-btn--save { background: #01747b; color: #fff; border-color: #015a5f; }
+.kos-edit-btn--save:hover { background: #015a5f; }
+.kos-edit-btn--hide { background: #fff3e0; color: #e65100; border-color: #ffcc80; }
+.kos-edit-btn--add { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+
+.kos-edit-mode div[id^="listek"] { outline: 2px dashed rgba(1, 116, 123, 0.4); }
+
+.kos-edit-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(1, 116, 123, 0.15); display: flex;
+  align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #01747b;
+  cursor: pointer; z-index: 100;
+  font-family: system-ui, sans-serif;
+}
+.kos-edit-overlay:hover { background: rgba(1, 116, 123, 0.3); }
+
+.kos-edit-dialog {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #fff; border: 2px solid #01747b; z-index: 100000;
+  padding: 16px; min-width: 320px; max-width: 420px;
+  font-family: system-ui, sans-serif; font-size: 13px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.kos-edit-dialog__title {
+  font-size: 14px; font-weight: 700; color: #01747b;
+  margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #eee;
+}
+.kos-edit-dialog__form {
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 10px;
+  align-items: center; margin-bottom: 12px;
+}
+.kos-edit-dialog__form label { font-size: 11px; font-weight: 600; color: #666; }
+.kos-edit-input {
+  padding: 4px 8px; font-size: 12px; border: 1px solid #ccc;
+  font-family: system-ui, sans-serif; width: 100%;
+}
+.kos-edit-dialog__buttons { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* ── Footer row ── */
+.kos-footer-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 2px 4px; font-size: 11px;
+}
+.kos-refresh-link { font-size: 11px !important; }
+
+/* ── Syllabus archive badge ── */
+.kos-archive-badge {
+  position: fixed; bottom: 16px; right: 16px; z-index: 100000;
+  padding: 8px 16px; background: #01747b; color: #fff;
+  font-family: system-ui, sans-serif; font-size: 12px; font-weight: 600;
+  animation: kos-fade-in 0.3s;
+}
+@keyframes kos-fade-in { from { opacity: 0; transform: translateY(10px); } }
+
+/* ── Syllabus overlay (from schedule click) ── */
+.kos-syllabus-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 100000;
+  display: flex; align-items: center; justify-content: center;
+  animation: kos-fade-in 0.15s;
+}
+.kos-syllabus-modal {
+  background: #fff; border: 2px solid #01747b;
+  width: 90%; max-width: 700px; max-height: 80vh;
+  display: flex; flex-direction: column;
+  font-family: system-ui, sans-serif;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.kos-syllabus-modal__header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px; background: #01747b; color: #fff;
+  font-size: 14px; font-weight: 700; flex-shrink: 0;
+}
+.kos-syllabus-modal__close {
+  background: none; border: none; color: #fff; font-size: 18px;
+  cursor: pointer; padding: 0 4px; line-height: 1;
+}
+.kos-syllabus-modal__close:hover { opacity: 0.7; }
+.kos-syllabus-modal__body {
+  padding: 16px; overflow-y: auto; font-size: 13px;
+  line-height: 1.6; color: #333;
+}
+.kos-syllabus-modal__body h4 {
+  margin: 14px 0 4px; font-size: 13px; color: #01747b;
+  border-bottom: 1px solid #e0e0e0; padding-bottom: 2px;
+}
+.kos-syllabus-modal__meta {
+  font-size: 12px; color: #666; margin-bottom: 10px;
+  padding-bottom: 8px; border-bottom: 1px solid #eee;
+}
+.kos-syllabus-modal__section {
+  white-space: pre-wrap; margin-bottom: 8px; font-size: 13px;
+}
+.kos-syllabus-modal__empty {
+  padding: 20px; text-align: center; color: #999; font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .kos-bottom-row { grid-template-columns: 1fr; }
+  .kos-topbar { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+
+@media (max-width: 600px) {
+  .kos-grid__block-room { display: none; }
+  .kos-grid__block-time { display: none; }
+  .kos-grid__daycell { width: 22px; min-width: 22px; font-size: 10px; }
+  .kos-grid__block { padding: 1px 3px; gap: 2px; }
+  .kos-grid__block-name { font-size: 9px; }
+  .kos-grid__block-parity { font-size: 7px; padding: 0 2px; }
+  .kos-nav-compact__link { padding: 4px 8px; font-size: 10px; }
+}
+
+/* Hidden entries list */
+.kos-hidden-toggle { display: block; padding: 4px 10px; font-size: 11px; }
+.kos-hidden-list { padding: 4px 10px 8px; }
+.kos-hidden-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 3px 0; font-size: 12px; border-bottom: 1px solid #eee;
+}
+.kos-hidden-row:last-child { border-bottom: none; }
+
+/* Archive progress overlay */
+.kos-archive-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); z-index: 100000;
+  display: flex; align-items: center; justify-content: center;
+}
+.kos-archive-progress {
+  background: #fff; padding: 24px 32px; border-radius: 8px; min-width: 320px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3); text-align: center;
+}
+.kos-archive-progress__title { font-weight: 700; font-size: 15px; margin-bottom: 12px; color: #01747b; }
+.kos-archive-progress__bar-bg { background: #e0e0e0; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+.kos-archive-progress__bar { background: #01747b; height: 100%; border-radius: 4px; transition: width 0.3s; }
+.kos-archive-progress__text { font-size: 12px; color: #666; }
+
+/* Toast notification */
+.kos-toast {
+  position: fixed; bottom: 20px; right: 20px; z-index: 100000;
+  background: #fff; border: 2px solid #01747b; border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 16px 20px;
+  max-width: 420px; font-size: 13px; line-height: 1.5;
+  animation: kos-slide-in 0.3s ease-out;
+}
+@keyframes kos-slide-in { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.kos-toast__title { font-weight: 700; font-size: 14px; color: #01747b; margin-bottom: 8px; }
+.kos-toast__item { padding: 4px 0; border-top: 1px solid #eee; }
+.kos-toast__item--hot { background: #fffbe6; margin: 2px -8px; padding: 4px 8px; border-radius: 4px; border-top-color: transparent; }
+.kos-toast__badge { display: inline-block; background: #f59e0b; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
+.kos-toast__meta { color: #888; font-size: 11px; }
+.kos-toast__close { position: absolute; top: 8px; right: 10px; background: none; border: none; font-size: 18px; cursor: pointer; color: #999; line-height: 1; }
+.kos-toast__close:hover { color: #333; }
+
+/* Interest highlight for modules */
+.kos-mod-row--interest { background: #fffbe6 !important; border-left: 3px solid #f59e0b; }
+.kos-interest-badge { display: inline-block; background: #f59e0b; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+
+@media (max-width: 450px) {
+  .kos-grid__block-name { font-size: 8px; }
+  .kos-grid__hourcell { font-size: 8px; }
+  .kos-dashboard { padding: 4px 6px; gap: 6px; }
+  .kos-grid__row { min-height: 28px; }
+  .kos-grid__block { min-height: 24px; }
+}
