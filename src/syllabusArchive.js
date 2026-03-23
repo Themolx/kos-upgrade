@@ -266,15 +266,22 @@ const SyllabusArchive = {
 
   getArchive() {
     return new Promise(resolve => {
-      chrome.storage.local.get('syllabus_archive', result => {
-        resolve(result.syllabus_archive || {});
-      });
+      if (!KOS.isContextValid()) { resolve({}); return; }
+      try {
+        chrome.storage.local.get('syllabus_archive', result => {
+          if (chrome.runtime.lastError) { resolve({}); return; }
+          resolve(result.syllabus_archive || {});
+        });
+      } catch (e) { resolve({}); }
     });
   },
 
   setArchive(archive) {
     return new Promise(resolve => {
-      chrome.storage.local.set({ syllabus_archive: archive }, resolve);
+      if (!KOS.isContextValid()) { resolve(); return; }
+      try {
+        chrome.storage.local.set({ syllabus_archive: archive }, resolve);
+      } catch (e) { resolve(); }
     });
   },
 
@@ -285,7 +292,27 @@ const SyllabusArchive = {
 
   async exportArchive() {
     const archive = await this.getArchive();
-    const keys = Object.keys(archive);
+
+    // Filter to only include enrolled subjects and modules
+    const subjects = await KOS.getCache('subjects');
+    const modules = await KOS.getCache('modules');
+    const enrolledCodes = new Set();
+    if (subjects && subjects.data) subjects.data.forEach(s => enrolledCodes.add(s.code));
+    if (modules && modules.data) {
+      (modules.data.enrolled || []).forEach(m => enrolledCodes.add(m.code));
+    }
+
+    // If we have enrollment data, filter; otherwise export all (fallback)
+    let keys;
+    if (enrolledCodes.size > 0) {
+      keys = Object.keys(archive).filter(key => {
+        const entry = archive[key];
+        return enrolledCodes.has(key) || enrolledCodes.has(entry.code);
+      });
+    } else {
+      keys = Object.keys(archive);
+    }
+
     if (keys.length === 0) {
       alert('Archiv je prazdny. Navstiv detail predmetu pro archivaci.');
       return;

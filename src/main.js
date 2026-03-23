@@ -32,6 +32,45 @@
 
   console.log('[KOS Upgrade] Initializing...');
 
+  // Inject global nav bar on every page (except logout)
+  if (!window.location.href.includes('logout.do')) {
+    try {
+      const navLinks = [
+        { label: 'Rozvrh', endpoint: 'studentMinutesSchedule.do' },
+        { label: 'Předměty', endpoint: 'subjects.do' },
+        { label: 'Moduly', endpoint: 'moduls.do' },
+        { label: 'Výsledky', endpoint: 'results.do' },
+        { label: 'Termíny zkoušek', endpoint: 'examsTerms.do' },
+        { label: 'Přihlášené zkoušky', endpoint: 'examsView.do' },
+        { label: 'Zápis dle kódu', endpoint: 'subjectsCode.do' },
+        { label: 'Zápis dle plánu', endpoint: 'structuredSubjectsPlan.do' },
+        { label: 'Osobní údaje', endpoint: 'studentDetail.do' },
+      ];
+      const nav = KOS.el('div', { className: 'kos-nav-compact kos-nav-global' });
+      for (const link of navLinks) {
+        nav.appendChild(KOS.el('a', {
+          className: 'kos-nav-compact__link', href: '#',
+          onClick(e) { e.preventDefault(); KOS.navigate(link.endpoint); }
+        }, link.label));
+      }
+      // Also add Home link (back to welcome) on non-home pages
+      const url = window.location.href;
+      const nonHomePages = ['subjects.do', 'moduls.do', 'studentMinutesSchedule.do',
+        'subjectDetail.do', 'results.do', 'examsTerms.do', 'examsView.do',
+        'subjectsCode.do', 'structuredSubjectsPlan.do', 'studentDetail.do',
+        'minutesSchedule.do'];
+      if (nonHomePages.some(p => url.includes(p))) {
+        const homeLink = KOS.el('a', {
+          className: 'kos-nav-compact__link kos-nav-compact__link--home', href: '#',
+          onClick(e) { e.preventDefault(); KOS.navigate('toWelcome.do'); }
+        }, '← Domů');
+        nav.insertBefore(homeLink, nav.firstChild);
+      }
+      const mainPanel = document.getElementById('main-panel');
+      if (mainPanel) mainPanel.insertBefore(nav, mainPanel.firstChild);
+    } catch (e) { console.error('[KOS Upgrade] NavBar:', e); }
+  }
+
   try { WeekParity.init(); } catch (e) { console.error('[KOS Upgrade] WeekParity:', e); }
   try { Schedule.init(); } catch (e) { console.error('[KOS Upgrade] Schedule:', e); }
   try { ScheduleEdit.init(); } catch (e) { console.error('[KOS Upgrade] ScheduleEdit:', e); }

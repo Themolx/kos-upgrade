@@ -11,11 +11,13 @@
 const Homepage = {
   init() {
     const url = window.location.href;
-    // Match welcome pages AND the base KOS URL after login
-    const path = url.replace(/\?.*$/, '').replace(/https?:\/\/[^/]+/, '');
-    const isHome = url.includes('toWelcome.do') || url.includes('welcome.do') ||
-      path === '/' || path === '' || path === '/kos/' || path === '/kos';
-    if (!isHome) return;
+    // Known non-home pages — don't inject dashboard on these
+    const nonHomePages = ['subjects.do', 'moduls.do', 'studentMinutesSchedule.do',
+      'subjectDetail.do', 'results.do', 'examsTerms.do', 'examsView.do',
+      'subjectsCode.do', 'structuredSubjectsPlan.do', 'studentDetail.do',
+      'logout.do', 'minutesSchedule.do'];
+    const isNonHome = nonHomePages.some(p => url.includes(p));
+    if (isNonHome) return;
     this.waitForPanel(() => this.enhance());
   },
 
@@ -30,9 +32,6 @@ const Homepage = {
     if (document.querySelector('.kos-dashboard')) return;
 
     const dashboard = KOS.el('div', { className: 'kos-dashboard' });
-
-    // Ultra lista (nav) at the very top
-    dashboard.appendChild(this.createNavLinks());
 
     // Top bar: date + week
     dashboard.appendChild(this.createTopBar());
@@ -67,43 +66,28 @@ const Homepage = {
     }, 'Obnovit data'));
     dashboard.appendChild(footer);
 
+    // Move global nav bar to TOP of dashboard (main.js inserts it into #main-panel before us)
+    const existingNav = document.querySelector('.kos-nav-global');
+    if (existingNav) dashboard.insertBefore(existingNav, dashboard.firstChild);
+
     const mainPanel = document.getElementById('main-panel');
     if (mainPanel) mainPanel.insertBefore(dashboard, mainPanel.firstChild);
 
-    // Start countdown AFTER dashboard is in the DOM
+    // Start countdown AFTER dashboard is in the DOM (clear any previous interval)
+    if (this._countdownInterval) clearInterval(this._countdownInterval);
     this.updateCountdown();
-    setInterval(() => this.updateCountdown(), 30000);
+    this._countdownInterval = setInterval(() => this.updateCountdown(), 30000);
 
     // Auto-refresh data in the background (silent, no overlay)
     // Skip if this enhance() was triggered by a silent refresh (prevent infinite loop)
+    // On login.do, only auto-refresh if we actually found a valid page code
     if (!this._refreshing) {
-      setTimeout(() => this.headlessRefresh({ silent: true }), 2000);
+      const isLogin = window.location.href.includes('login.do');
+      const hasPageCode = !!KOS.getPageCode();
+      if (!isLogin || hasPageCode) {
+        setTimeout(() => this.headlessRefresh({ silent: true }), 2000);
+      }
     }
-  },
-
-  // ── Nav (ultra lista — top) ──
-
-  createNavLinks() {
-    const links = [
-      { label: 'Rozvrh', endpoint: 'studentMinutesSchedule.do' },
-      { label: 'Výsledky', endpoint: 'results.do' },
-      { label: 'Předměty', endpoint: 'subjects.do' },
-      { label: 'Moduly', endpoint: 'moduls.do' },
-      { label: 'Termíny zkoušek', endpoint: 'examsTerms.do' },
-      { label: 'Přihlášené zkoušky', endpoint: 'examsView.do' },
-      { label: 'Zápis dle kódu', endpoint: 'subjectsCode.do' },
-      { label: 'Zápis dle plánu', endpoint: 'structuredSubjectsPlan.do' },
-      { label: 'Osobní údaje', endpoint: 'studentDetail.do' },
-    ];
-
-    const nav = KOS.el('div', { className: 'kos-nav-compact' });
-    for (const link of links) {
-      nav.appendChild(KOS.el('a', {
-        className: 'kos-nav-compact__link', href: '#',
-        onClick(e) { e.preventDefault(); KOS.navigate(link.endpoint); }
-      }, link.label));
-    }
-    return nav;
   },
 
   // ── Top bar ──
@@ -143,6 +127,7 @@ const Homepage = {
     const todayEntries = cached.data
       .filter(e => e.day === todayDay && !hiddenEntries.has(`${e.code}@${e.day}`))
       .filter(e => KOS.isEntryActive(e.parity, isOdd))
+      .filter(e => !e.startDate || !KOS.parseCzDate(e.startDate) || KOS.parseCzDate(e.startDate) <= new Date())
       .filter(e => e.time)
       .map(e => {
         const [s, en] = e.time.split('-').map(t => t.trim());
@@ -261,10 +246,13 @@ const Homepage = {
         if (startSlot < 0 || endSlot <= startSlot) continue;
 
         const isActive = KOS.isEntryActive(e.parity, isOdd);
+        // Check if entry has a deferred start date that hasn't arrived yet
+        const isDeferred = e.startDate && KOS.parseCzDate(e.startDate) && KOS.parseCzDate(e.startDate) > new Date();
+        const isDim = !isActive || isDeferred;
 
         const block = KOS.el('div', {
-          className: `kos-grid__block ${!isActive ? 'kos-grid__block--dim' : ''} ${isToday && isActive ? 'kos-grid__block--today' : ''}`,
-          title: `${e.code} — ${e.name}\n${e.time} · ${e.room}${e.parity !== 'každý' ? ' · ' + e.parity.replace('týdny:', 't:') : ''}\nklik = sylabus`
+          className: `kos-grid__block ${isDim ? 'kos-grid__block--dim' : ''} ${isToday && !isDim ? 'kos-grid__block--today' : ''}`,
+          title: `${e.code} — ${e.name}\n${e.time} · ${e.room}${e.parity !== 'každý' ? ' · ' + e.parity.replace('týdny:', 't:') : ''}${isDeferred ? '\nZačíná ' + e.startDate : ''}\nklik = sylabus`
         },
           KOS.el('span', { className: 'kos-grid__block-time' }, e.time),
           KOS.el('span', { className: 'kos-grid__block-name' }, e.name)
@@ -365,7 +353,17 @@ const Homepage = {
 
   async showSyllabusModal(code, name) {
     const archive = await SyllabusArchive.getArchive();
-    const entry = archive[code];
+    // Try exact match first, then search by code substring or name match
+    let entry = archive[code];
+    if (!entry) {
+      for (const [key, val] of Object.entries(archive)) {
+        if (key === code || val.code === code ||
+            (name && val.name && val.name.toLowerCase() === name.toLowerCase())) {
+          entry = val;
+          break;
+        }
+      }
+    }
 
     // Remove existing overlay if any
     document.querySelector('.kos-syllabus-overlay')?.remove();
@@ -396,26 +394,51 @@ const Homepage = {
       }
       for (const [heading, content] of Object.entries(entry.sections)) {
         body.appendChild(KOS.el('h4', {}, heading));
-        body.appendChild(KOS.el('div', { className: 'kos-syllabus-modal__section' }, content));
+        body.appendChild(this.formatSyllabusContent(content));
       }
       modal.appendChild(body);
     } else if (entry && entry.text && !isCorrupted) {
       const body = KOS.el('div', { className: 'kos-syllabus-modal__body' }, entry.text);
       modal.appendChild(body);
     } else {
-      const empty = KOS.el('div', { className: 'kos-syllabus-modal__empty' });
-      if (isCorrupted) {
-        empty.appendChild(KOS.el('div', {}, 'Archiv tohoto předmětu obsahuje zastaralá data.'));
-      } else {
-        empty.appendChild(KOS.el('div', {}, 'Sylabus zatím není archivován.'));
+      const empty = KOS.el('div', { className: 'kos-syllabus-modal__body' });
+
+      // Show cached module/subject info if available
+      const moduleInfo = await this.findCachedInfo(code);
+      if (moduleInfo) {
+        const infoDiv = KOS.el('div', { className: 'kos-syllabus-modal__meta' });
+        const parts = [];
+        if (moduleInfo.date) parts.push(`Datum: ${moduleInfo.date}`);
+        if (moduleInfo.time) parts.push(`Cas: ${moduleInfo.time}`);
+        if (moduleInfo.room) parts.push(`Mistnost: ${moduleInfo.room}`);
+        if (moduleInfo.credits) parts.push(`Kredity: ${moduleInfo.credits}`);
+        if (moduleInfo.end) parts.push(`Zakonceni: ${moduleInfo.end}`);
+        if (moduleInfo.deadline) parts.push(`Deadline: ${moduleInfo.deadline}`);
+        if (moduleInfo.spots) parts.push(`Mist: ${moduleInfo.spots}`);
+        infoDiv.textContent = parts.join(' · ');
+        empty.appendChild(infoDiv);
       }
-      empty.appendChild(KOS.el('div', { style: { marginTop: '8px' } },
-        'Klikni ',
-        KOS.el('a', { className: 'kos-link', href: '#',
-          onClick(ev) { ev.preventDefault(); overlay.remove(); Homepage.archiveAllSyllabi(); }
-        }, 'Archivovat vše'),
-        ' pro stažení všech sylabů najednou.'
-      ));
+
+      if (isCorrupted) {
+        empty.appendChild(KOS.el('div', { style: { margin: '12px 0', color: '#999' } }, 'Archiv obsahuje zastaralá data.'));
+      } else {
+        empty.appendChild(KOS.el('div', { style: { margin: '12px 0', color: '#999' } }, 'Sylabus se archivuje na pozadí...'));
+      }
+
+      // Links to open in KOS or archive
+      const links = KOS.el('div', { style: { marginTop: '12px', display: 'flex', gap: '12px' } });
+      links.appendChild(KOS.el('a', { className: 'kos-link', href: '#',
+        onClick(ev) {
+          ev.preventDefault(); overlay.remove();
+          chrome.storage.local.set({ pendingDetail: { type: 'module', code } }, () => {
+            KOS.navigate('moduls.do');
+          });
+        }
+      }, 'Otevrit v KOS'));
+      links.appendChild(KOS.el('a', { className: 'kos-link', href: '#',
+        onClick(ev) { ev.preventDefault(); overlay.remove(); Homepage.archiveAllSyllabi(); }
+      }, 'Archivovat vše'));
+      empty.appendChild(links);
       modal.appendChild(empty);
     }
 
@@ -425,6 +448,103 @@ const Homepage = {
     // ESC to close
     const onKey = (ev) => { if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKey); } };
     document.addEventListener('keydown', onKey);
+  },
+
+  /** Format syllabus content — detect date+teacher patterns and make them readable */
+  formatSyllabusContent(text) {
+    if (!text) return KOS.el('div', { className: 'kos-syllabus-modal__section' });
+
+    // Detect numbered lecture entries like "1/ 11. 2. Petr Kubica: Topic..."
+    // Also handles compact dates like "4.3. FAMUFEST - výuka odpadá"
+    // Match: N/ DD. MM. (numbered with spaced date) or DD.MM. (compact bare date)
+    const entryRe = /(?:^|\n)\s*(?:(\d{1,2})\s*[/.)]\s*(\d{1,2}\.\s*\d{1,2}\.)|(\d{1,2}\.\d{1,2}\.)(?=\s))\s*/g;
+    const matches = [...text.matchAll(entryRe)];
+
+    if (matches.length >= 3) {
+      const list = KOS.el('div', { className: 'kos-syllabus-schedule' });
+
+      // Add any preamble text before first entry
+      const preamble = text.substring(0, matches[0].index).trim();
+      if (preamble) {
+        list.appendChild(KOS.el('div', { className: 'kos-schedule-note' }, preamble));
+      }
+
+      for (let i = 0; i < matches.length; i++) {
+        const m = matches[i];
+        const num = m[1] || '';
+        const date = (m[2] || m[3] || '').trim();
+        const dateLabel = num ? `${num}/ ${date}` : date;
+        // Content extends from end of this match to start of next match (or end of string)
+        const contentStart = m.index + m[0].length;
+        const contentEnd = i + 1 < matches.length ? matches[i + 1].index : text.length;
+        const content = text.substring(contentStart, contentEnd).trim();
+
+        // Split by first colon to get teacher and topic
+        const colonIdx = content.indexOf(':');
+        let teacher = '', topic = content;
+        if (colonIdx > 0 && colonIdx < 60) {
+          // Only treat as teacher:topic if the part before colon looks like a name
+          const beforeColon = content.substring(0, colonIdx).trim();
+          if (/^[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ]/.test(beforeColon) && !beforeColon.includes('\n')) {
+            teacher = beforeColon;
+            topic = content.substring(colonIdx + 1).trim();
+          }
+        }
+
+        const row = KOS.el('div', { className: 'kos-schedule-item' });
+        row.appendChild(KOS.el('span', { className: 'kos-schedule-date' }, dateLabel));
+        if (teacher) {
+          row.appendChild(KOS.el('span', { className: 'kos-schedule-teacher' }, teacher));
+        }
+        if (topic) {
+          row.appendChild(KOS.el('span', { className: 'kos-schedule-topic' }, topic));
+        }
+        list.appendChild(row);
+      }
+      return list;
+    }
+
+    // Fallback: detect bare "DD. MM." date entries without number prefix
+    const bareDateRe = /(?:^|\n)\s*(\d{1,2}\.\s*\d{1,2}\.)\s+/g;
+    const bareMatches = [...text.matchAll(bareDateRe)];
+    if (bareMatches.length >= 3) {
+      const list = KOS.el('div', { className: 'kos-syllabus-schedule' });
+      const preamble = text.substring(0, bareMatches[0].index).trim();
+      if (preamble) list.appendChild(KOS.el('div', { className: 'kos-schedule-note' }, preamble));
+
+      for (let i = 0; i < bareMatches.length; i++) {
+        const m = bareMatches[i];
+        const date = m[1].trim();
+        const contentStart = m.index + m[0].length;
+        const contentEnd = i + 1 < bareMatches.length ? bareMatches[i + 1].index : text.length;
+        const content = text.substring(contentStart, contentEnd).trim();
+
+        const row = KOS.el('div', { className: 'kos-schedule-item' });
+        row.appendChild(KOS.el('span', { className: 'kos-schedule-date' }, date));
+        row.appendChild(KOS.el('span', { className: 'kos-schedule-topic' }, content));
+        list.appendChild(row);
+      }
+      return list;
+    }
+
+    // Default: plain text
+    return KOS.el('div', { className: 'kos-syllabus-modal__section' }, text);
+  },
+
+  /** Find cached info about a subject/module from subjects or modules cache */
+  async findCachedInfo(code) {
+    const subjects = await KOS.getCache('subjects');
+    if (subjects && subjects.data) {
+      const s = subjects.data.find(x => x.code === code);
+      if (s) return s;
+    }
+    const modules = await KOS.getCache('modules');
+    if (modules && modules.data) {
+      for (const m of [...(modules.data.enrolled || []), ...(modules.data.available || [])]) {
+        if (m.code === code) return m;
+      }
+    }
+    return null;
   },
 
   timeToSlot(timeStr, minHour) {
@@ -564,11 +684,8 @@ const Homepage = {
 
     const isPast = dd && daysUntil !== null && daysUntil < 0;
 
-    const INTERESTS = [/\bAI\b/i, /umělá inteligence/i, /artificial intelligence/i, /\banalog/i, /\bfilm\b.*analog|analog.*\bfilm\b/i, /kreativní partner/i, /machine learning/i, /neural/i, /gener[aá]tivn/i];
-    const isInteresting = INTERESTS.some(re => re.test(m.name));
-
     const row = KOS.el('div', {
-      className: `kos-mod-row kos-mod-row--clickable ${urgent ? 'kos-mod-row--urgent' : ''} ${soon ? 'kos-mod-row--soon' : ''} ${isPast ? 'kos-mod-row--past' : ''} ${isInteresting ? 'kos-mod-row--interest' : ''}`
+      className: `kos-mod-row kos-mod-row--clickable ${urgent ? 'kos-mod-row--urgent' : ''} ${soon ? 'kos-mod-row--soon' : ''} ${isPast ? 'kos-mod-row--past' : ''}`
     });
 
     if (dateLabel) {
@@ -581,7 +698,6 @@ const Homepage = {
     }
 
     row.appendChild(KOS.el('span', { className: 'kos-mod-name' }, m.name));
-    if (isInteresting) row.appendChild(KOS.el('span', { className: 'kos-interest-badge' }, '⭐'));
 
     if (m.room) row.appendChild(KOS.el('span', { className: 'kos-mod-meta' }, m.room));
     row.appendChild(KOS.el('span', { className: 'kos-mod-meta' }, `${m.credits} kr`));
@@ -597,13 +713,20 @@ const Homepage = {
   async headlessRefresh(opts = {}) {
     const silent = opts.silent || false;
     const pageCode = KOS.getPageCode();
-    if (!pageCode) { if (!silent) alert('Chybí page code.'); return; }
+    if (!pageCode) {
+      if (!silent) {
+        // Redirect to KOS home to get a fresh session with a valid page code
+        window.open(KOS.BASE, '_self');
+      }
+      return;
+    }
 
     // Save old available modules for diffing
     const oldModules = await KOS.getCache('modules');
     const oldAvailCodes = new Set((oldModules?.data?.available || []).map(m => m.code));
 
-    await KOS.clearCache();
+    // Don't clear cache upfront — overwrite each key as it succeeds
+    // so a failed refresh doesn't leave the user with an empty dashboard
 
     let overlay = null;
     if (!silent) {
@@ -712,6 +835,7 @@ const Homepage = {
             }
             if (dayIdx < 0 || dayIdx > 4) return;
 
+            const detailText = detail.textContent;
             detail.querySelectorAll('tr').forEach(row => {
               const cells = row.querySelectorAll('td.ttSubjectRow1');
               if (cells.length < 5) return;
@@ -723,10 +847,28 @@ const Homepage = {
               const weekEl = row.querySelector('rozvrhove_tydny');
               let parity = 'každý';
               if (weekEl) parity = `týdny:${weekEl.textContent.trim()}`;
+
+              // Check poznámka for deferred start date
+              let startDate = '';
+              const codeEsc = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const startRe = new RegExp(codeEsc + '[\\s\\S]{0,300}začne\\s+(\\d{1,2}\\.\\d{1,2}\\.\\d{4})|začne\\s+(\\d{1,2}\\.\\d{1,2}\\.\\d{4})[\\s\\S]{0,300}' + codeEsc, 'i');
+              const startMatch = detailText.match(startRe);
+              if (startMatch) startDate = startMatch[1] || startMatch[2];
+
+              // Check for teaching week numbers in poznámka
+              const poznamkaCell = cells.length > 5 ? cells[cells.length - 1] : null;
+              const poznamka = poznamkaCell ? poznamkaCell.textContent.trim() : '';
+              const weekMatch = poznamka.match(/t:\s*([\d,\s]+)/);
+              if (weekMatch && parity === 'každý') {
+                parity = `týdny:${weekMatch[1].replace(/\s/g, '')}`;
+              }
+
               const key = `${dayIdx}-${code}-${time}-${parity}`;
               if (seen.has(key)) return;
               seen.add(key);
-              entries.push({ day: dayIdx, code, name, time, room, parity });
+              const entry = { day: dayIdx, code, name, time, room, parity };
+              if (startDate) entry.startDate = startDate;
+              entries.push(entry);
             });
           });
         }
@@ -797,11 +939,18 @@ const Homepage = {
         this._refreshing = true;
         const dashboard = document.querySelector('.kos-dashboard');
         if (dashboard) {
+          // Detach nav bar before removing dashboard so it survives the refresh
+          const nav = dashboard.querySelector('.kos-nav-global');
+          const mainPanel = document.getElementById('main-panel');
+          if (nav && mainPanel) mainPanel.insertBefore(nav, mainPanel.firstChild);
           dashboard.remove();
           await this.enhance();
         }
         this._refreshing = false;
         console.log('[KOS] Silent refresh done');
+
+        // Auto-archive syllabi in background (lazy loading)
+        setTimeout(() => this.backgroundArchive(), 3000);
       } else {
         this.updateArchiveOverlay(overlay, 3, 3, 'Hotovo! Obnovuji stránku...');
         setTimeout(() => { overlay.remove(); window.location.reload(); }, 800);
@@ -815,15 +964,12 @@ const Homepage = {
   },
 
   showNewModulesToast(modules) {
-    const INTERESTS = [/\bAI\b/i, /umělá inteligence/i, /artificial intelligence/i, /\banalog/i, /\bfilm\b.*analog|analog.*\bfilm\b/i, /kreativní partner/i, /machine learning/i, /neural/i, /gener[aá]tivn/i];
     const toast = KOS.el('div', { className: 'kos-toast' });
-    toast.appendChild(KOS.el('div', { className: 'kos-toast__title' }, `🆕 ${modules.length} ${modules.length === 1 ? 'nový modul' : 'nové moduly'} v KOS`));
+    toast.appendChild(KOS.el('div', { className: 'kos-toast__title' }, `${modules.length} ${modules.length === 1 ? 'nový modul' : 'nové moduly'} v KOS`));
     for (const m of modules) {
-      const isInteresting = INTERESTS.some(re => re.test(m.name));
-      const row = KOS.el('div', { className: `kos-toast__item ${isInteresting ? 'kos-toast__item--hot' : ''}` });
+      const row = KOS.el('div', { className: 'kos-toast__item' });
       row.appendChild(KOS.el('b', {}, m.code));
       row.appendChild(document.createTextNode(` ${m.name}`));
-      if (isInteresting) row.appendChild(KOS.el('span', { className: 'kos-toast__badge' }, '⭐ Zajímavé pro tebe'));
       if (m.deadline) row.appendChild(KOS.el('span', { className: 'kos-toast__meta' }, ` · do ${m.deadline}`));
       if (m.spots) row.appendChild(KOS.el('span', { className: 'kos-toast__meta' }, ` · ${m.spots} míst`));
       toast.appendChild(row);
@@ -833,11 +979,51 @@ const Homepage = {
     setTimeout(() => toast.remove(), 30000);
   },
 
+  /** Silent background archive — archives all syllabi without UI overlay */
+  async backgroundArchive() {
+    if (this._archiving) return;
+    this._archiving = true;
+    try {
+      const archive = await SyllabusArchive.getArchive();
+      const archivedCodes = new Set(Object.keys(archive));
+      // Also check by code field
+      for (const val of Object.values(archive)) {
+        if (val.code) archivedCodes.add(val.code);
+      }
+
+      // Check if there are un-archived subjects/modules
+      const subjects = await KOS.getCache('subjects');
+      const modules = await KOS.getCache('modules');
+      const allCodes = new Set();
+      if (subjects && subjects.data) subjects.data.forEach(s => allCodes.add(s.code));
+      if (modules && modules.data) {
+        (modules.data.enrolled || []).forEach(m => allCodes.add(m.code));
+      }
+
+      const missing = [...allCodes].filter(c => !archivedCodes.has(c));
+      if (missing.length === 0) {
+        console.log('[KOS] All syllabi already archived');
+        this._archiving = false;
+        return;
+      }
+
+      console.log(`[KOS] Background archive: ${missing.length} items to archive`);
+      await this.archiveAllSyllabi({ silent: true });
+    } catch (err) {
+      console.warn('[KOS] Background archive failed:', err);
+    }
+    this._archiving = false;
+  },
+
   // ── Headless syllabus archiving ──
 
-  async archiveAllSyllabi() {
+  async archiveAllSyllabi(opts = {}) {
+    const silent = opts.silent || false;
     const pageCode = KOS.getPageCode();
-    if (!pageCode) { alert('Chybí page code – zkus obnovit stránku.'); return; }
+    if (!pageCode) {
+      if (!silent) window.open(KOS.BASE, '_self');
+      return;
+    }
 
     const loadIframe = (url) => new Promise((resolve, reject) => {
       const frame = document.createElement('iframe');
@@ -857,9 +1043,12 @@ const Homepage = {
       return pc;
     };
 
-    const overlay = this.createArchiveOverlay(1);
-    this.updateArchiveOverlay(overlay, 0, 1, 'Načítám předměty...');
-    document.body.appendChild(overlay);
+    let overlay = null;
+    if (!silent) {
+      overlay = this.createArchiveOverlay(1);
+      if (overlay) this.updateArchiveOverlay(overlay, 0, 1, 'Načítám předměty...');
+      document.body.appendChild(overlay);
+    }
 
     try {
       // ── Step 1: Collect items to archive from subjects.do AND moduls.do ──
@@ -891,7 +1080,7 @@ const Homepage = {
           const onclick = link.getAttribute('onclick') || '';
           const href = link.getAttribute('href') || '';
           for (const text of [onclick, href]) {
-            const m = text.match(/showSubjectDetail\(\s*(\d+)/);
+            const m = text.match(/showSubjectDetail\(\s*'?(\d+)/);
             if (m) {
               const code = link.textContent.trim();
               const id = m[1];
@@ -906,7 +1095,7 @@ const Homepage = {
       subjFrame.remove();
 
       // 1b. Modules — load moduls.do, find module codes + try to find detailIds
-      this.updateArchiveOverlay(overlay, 0, 1, 'Načítám moduly...');
+      if (overlay) this.updateArchiveOverlay(overlay, 0, 1, 'Načítám moduly...');
       const modFrame = await loadIframe(`moduls.do?page=${currentPageCode}`);
       const modDoc = modFrame.contentDocument;
       const moduleCodes = []; // { code, name } — codes we need to archive
@@ -915,7 +1104,8 @@ const Homepage = {
         const archivedCodes = new Set(items.map(i => i.code));
 
         // Collect all module codes from header rows
-        for (const table of [modDoc.getElementById('seznamPrZapsane'), modDoc.getElementById('seznamPr')]) {
+        // Only archive enrolled modules (seznamPrZapsane), not available ones (seznamPr)
+        for (const table of [modDoc.getElementById('seznamPrZapsane')]) {
           if (!table) continue;
           for (const row of table.querySelectorAll('tr')) {
             const hCells = row.querySelectorAll('td.tableHeader');
@@ -954,9 +1144,12 @@ const Homepage = {
         // Scan full page HTML for showSubjectDetail patterns near module codes
         if (moduleCodes.length > 0) {
           const html = modDoc.body.innerHTML;
+
+          // Strategy A: Search for showSubjectDetail near module codes (wide range)
           for (const mod of [...moduleCodes]) {
-            // Search for the code near a showSubjectDetail call
-            const re = new RegExp(`showSubjectDetail\\(\\s*(\\d+)[^)]*\\)[^<]{0,200}${mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}|${mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^<]{0,200}showSubjectDetail\\(\\s*(\\d+)`, 'i');
+            const codeEsc = mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Search with wider range (1000 chars)
+            const re = new RegExp(`showSubjectDetail\\(\\s*'?(\\d+)[^)]*\\)[\\s\\S]{0,1000}${codeEsc}|${codeEsc}[\\s\\S]{0,1000}showSubjectDetail\\(\\s*'?(\\d+)`, 'i');
             const m = html.match(re);
             if (m) {
               const id = m[1] || m[2];
@@ -964,13 +1157,35 @@ const Homepage = {
               moduleCodes.splice(moduleCodes.indexOf(mod), 1);
             }
           }
+
+          // Strategy B: Find links wrapping the module name text
+          if (moduleCodes.length > 0) {
+            modDoc.querySelectorAll('a').forEach(a => {
+              const text = a.textContent.trim();
+              const onclick = a.getAttribute('onclick') || '';
+              const href = a.getAttribute('href') || '';
+              for (const mod of [...moduleCodes]) {
+                if (text.includes(mod.code) || text.includes(mod.name)) {
+                  const id = (onclick.match(/showSubjectDetail\(\s*'?(\d+)/) ||
+                              href.match(/showSubjectDetail\(\s*'?(\d+)/) ||
+                              onclick.match(/\(\s*(\d{2,})\s*[,)]/) ||
+                              href.match(/subjectId=(\d+)/) || [])[1];
+                  if (id) {
+                    items.push({ code: mod.code, name: mod.name, detailId: id });
+                    moduleCodes.splice(moduleCodes.indexOf(mod), 1);
+                    console.log('[KOS] Found module via link text:', mod.code, '→', id);
+                  }
+                }
+              }
+            });
+          }
         }
       }
       modFrame.remove();
 
       // 1c. For remaining module codes without detailId, search subjects.do
       if (moduleCodes.length > 0) {
-        this.updateArchiveOverlay(overlay, 0, 1, 'Hledám moduly v předmětech...');
+        if (overlay) this.updateArchiveOverlay(overlay, 0, 1, 'Hledám moduly v předmětech...');
         const subj2Frame = await loadIframe(`subjects.do?page=${currentPageCode}`);
         const subj2Doc = subj2Frame.contentDocument;
         if (subj2Doc) {
@@ -978,7 +1193,7 @@ const Homepage = {
           const html = subj2Doc.body.innerHTML;
           for (const mod of [...moduleCodes]) {
             // Find the module code on subjects.do page and get its detailId
-            const re = new RegExp(`showSubjectDetail\\(\\s*(\\d+)[^)]*\\)[^<]{0,500}${mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}|${mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^<]{0,500}showSubjectDetail\\(\\s*(\\d+)`, 'i');
+            const re = new RegExp(`showSubjectDetail\\(\\s*'?(\\d+)[^)]*\\)[^<]{0,500}${mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}|${mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^<]{0,500}showSubjectDetail\\(\\s*'?(\\d+)`, 'i');
             const m = html.match(re);
             if (m) {
               const id = m[1] || m[2];
@@ -1005,7 +1220,7 @@ const Homepage = {
 
       // 1d. For remaining modules, click their links directly in moduls.do iframe
       if (moduleCodes.length > 0) {
-        this.updateArchiveOverlay(overlay, 0, 1, 'Archivuji moduly přímým kliknutím...');
+        if (overlay) this.updateArchiveOverlay(overlay, 0, 1, 'Archivuji moduly přímým kliknutím...');
         const modFrame2 = await loadIframe(`moduls.do?page=${currentPageCode}`);
         const modDoc2 = modFrame2.contentDocument;
         if (modDoc2) {
@@ -1013,14 +1228,55 @@ const Homepage = {
           const archive = await SyllabusArchive.getArchive();
           for (const mod of [...moduleCodes]) {
             try {
-              // Find the bold code text, then find the onclick link in its row
-              const boldEls = modDoc2.querySelectorAll('td.tableHeader b');
+              // Find the module code in the page and get a clickable link to its detail
               let link = null;
+              // Strategy 1: bold code text in tableHeader, check parent <a> or row links
+              const boldEls = modDoc2.querySelectorAll('td.tableHeader b');
               for (const b of boldEls) {
                 if (b.textContent.trim() === mod.code) {
+                  // Check if bold itself is inside a link
+                  const parentLink = b.closest('a');
+                  if (parentLink) { link = parentLink; break; }
+                  // Check the row for any link
                   const row = b.closest('tr');
-                  link = row ? row.querySelector('a[onclick]') : null;
+                  if (row) {
+                    link = row.querySelector('a[onclick]') ||
+                           row.querySelector('a[href*="javascript"]') ||
+                           row.querySelector('a[href*="subjectDetail"]') ||
+                           row.querySelector('a');
+                  }
+                  // Also check the next few sibling rows
+                  if (!link && row) {
+                    let sibling = row.nextElementSibling;
+                    for (let si = 0; si < 3 && sibling && !link; si++) {
+                      if (sibling.querySelector('td.tableHeader b')) break;
+                      link = sibling.querySelector('a[onclick]') ||
+                             sibling.querySelector('a[href*="javascript"]') ||
+                             sibling.querySelector('a');
+                      sibling = sibling.nextElementSibling;
+                    }
+                  }
                   break;
+                }
+              }
+              // Strategy 2: search all links for the module code text
+              if (!link) {
+                modDoc2.querySelectorAll('a').forEach(a => {
+                  if (!link && a.textContent.trim() === mod.code) link = a;
+                });
+              }
+              // Strategy 3: search all links for showSubjectDetail near the code
+              if (!link) {
+                const html = modDoc2.body.innerHTML;
+                const codeEsc = mod.code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const re = new RegExp(codeEsc + '[\\s\\S]{0,500}showSubjectDetail\\(\\s*\'?(\\d+)', 'i');
+                const match = html.match(re);
+                if (match) {
+                  // Found a detailId — add to items directly instead of clicking
+                  items.push({ code: mod.code, name: mod.name, detailId: match[1] });
+                  moduleCodes.splice(moduleCodes.indexOf(mod), 1);
+                  console.log('[KOS] Found module detailId via HTML scan:', mod.code, '→', match[1]);
+                  continue;
                 }
               }
               if (!link) {
@@ -1064,13 +1320,13 @@ const Homepage = {
         }
       }
 
-      if (!semesterId) { alert('Nepodařilo se zjistit semestr.'); return; }
-      if (items.length === 0) { alert('Nepodařilo se najít žádné předměty/moduly s detail ID.'); return; }
+      if (!semesterId) { if (!silent) alert('Nepodařilo se zjistit semestr.'); if (overlay) overlay.remove(); return; }
+      if (items.length === 0) { if (!silent) alert('Nepodařilo se najít žádné předměty/moduly s detail ID.'); if (overlay) overlay.remove(); return; }
 
       console.log(`[KOS] Found ${items.length} items to archive:`, items.map(s => `${s.code}=${s.detailId}`));
 
       // ── Step 2: Archive each item via form POST into iframe ──
-      this.updateArchiveOverlay(overlay, 0, items.length, 'Archivuji...');
+      if (overlay) this.updateArchiveOverlay(overlay, 0, items.length, 'Archivuji...');
 
       const archiveFrame = document.createElement('iframe');
       archiveFrame.name = 'kos-archive-frame';
@@ -1094,7 +1350,7 @@ const Homepage = {
         form.action = `subjectDetail.do?page=${currentPageCode}`;
         fSubjectId.value = s.detailId;
 
-        this.updateArchiveOverlay(overlay, i + 1, items.length, s.name);
+        if (overlay) this.updateArchiveOverlay(overlay, i + 1, items.length, s.name);
 
         try {
           await new Promise((resolve, reject) => {
@@ -1124,8 +1380,10 @@ const Homepage = {
       archiveFrame.remove();
       form.remove();
 
-      this.updateArchiveOverlay(overlay, items.length, items.length, `Hotovo! ${archived}/${items.length} archivováno.`);
-      setTimeout(() => overlay.remove(), 2000);
+      if (overlay) {
+        this.updateArchiveOverlay(overlay, items.length, items.length, `Hotovo! ${archived}/${items.length} archivováno.`);
+        setTimeout(() => overlay.remove(), 2000);
+      }
 
       // Refresh archive link in footer
       const footerRow = document.querySelector('.kos-footer-row');
@@ -1137,8 +1395,8 @@ const Homepage = {
 
     } catch (err) {
       console.error('[KOS] archiveAllSyllabi error:', err);
-      document.querySelector('.kos-archive-overlay')?.remove();
-      alert('Archivace selhala: ' + err.message);
+      if (overlay) overlay.remove();
+      if (!silent) alert('Archivace selhala: ' + err.message);
     }
   },
 
@@ -1173,11 +1431,11 @@ const Homepage = {
       // Combine both attributes for matching
       const texts = [onclick, href].filter(Boolean);
       for (const text of texts) {
-        // showSubjectDetail(123)
-        const m1 = text.match(/showSubjectDetail\(\s*(\d+)/);
+        // showSubjectDetail(123) or showSubjectDetail('123')
+        const m1 = text.match(/showSubjectDetail\(\s*'?(\d+)/);
         if (m1) return m1[1];
-        // viewSubject(..., 123)
-        const m2 = text.match(/viewSubject\([^)]*,\s*(\d+)\s*\)/);
+        // viewSubject(..., 123) or viewSubject(..., '123')
+        const m2 = text.match(/viewSubject\([^)]*,\s*'?(\d+)/);
         if (m2) return m2[1];
         // subjectId=123
         const m3 = text.match(/subjectId=(\d+)/);
@@ -1195,7 +1453,7 @@ const Homepage = {
     }
     // Last resort: scan raw innerHTML for showSubjectDetail pattern
     const html = row.innerHTML;
-    const m = html.match(/showSubjectDetail\(\s*(\d+)/);
+    const m = html.match(/showSubjectDetail\(\s*'?(\d+)/);
     if (m) return m[1];
     const m2 = html.match(/subjectId[=:](\d+)/);
     if (m2) return m2[1];

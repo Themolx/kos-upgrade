@@ -35,11 +35,11 @@ const Subjects = {
       chrome.storage.local.remove('pendingDetail');
 
       if (type === 'subject' && pending.id) {
-        // Find and click the showSubjectDetail link
-        const links = document.querySelectorAll('a[onclick*="showSubjectDetail"]');
+        // Find and click the showSubjectDetail link (onclick or href=javascript:)
+        const links = document.querySelectorAll('a[onclick*="showSubjectDetail"], a[href*="showSubjectDetail"]');
         for (const link of links) {
-          const onclick = link.getAttribute('onclick') || '';
-          if (onclick.includes(`showSubjectDetail(${pending.id}`)) {
+          const text = (link.getAttribute('onclick') || '') + (link.getAttribute('href') || '');
+          if (text.includes(`showSubjectDetail(${pending.id}`) || text.includes(`showSubjectDetail('${pending.id}'`)) {
             console.log(`[KOS Upgrade] Auto-opening subject detail: ${pending.code} (id=${pending.id})`);
             setTimeout(() => link.click(), 300);
             return;
@@ -47,8 +47,7 @@ const Subjects = {
         }
         // Fallback: try by code text
         if (pending.code) {
-          const allLinks = document.querySelectorAll('a[onclick*="showSubjectDetail"]');
-          for (const link of allLinks) {
+          for (const link of links) {
             if (link.textContent.trim() === pending.code) {
               console.log(`[KOS Upgrade] Auto-opening subject by code: ${pending.code}`);
               setTimeout(() => link.click(), 300);
@@ -64,9 +63,16 @@ const Subjects = {
         const boldEls = document.querySelectorAll('td.tableHeader b');
         for (const b of boldEls) {
           if (b.textContent.trim() === pending.code) {
-            // Find the closest link in this row
+            // Check if bold is inside a link (KOS uses href="javascript:showSubjectDetail(...)")
+            const parentLink = b.closest('a');
+            if (parentLink) {
+              console.log(`[KOS Upgrade] Auto-opening module detail (parent link): ${pending.code}`);
+              setTimeout(() => parentLink.click(), 300);
+              return;
+            }
+            // Fallback: find any link in the row
             const row = b.closest('tr');
-            const link = row ? row.querySelector('a[onclick]') : null;
+            const link = row ? (row.querySelector('a[onclick]') || row.querySelector('a[href*="javascript"]') || row.querySelector('a')) : null;
             if (link) {
               console.log(`[KOS Upgrade] Auto-opening module detail: ${pending.code}`);
               setTimeout(() => link.click(), 300);
@@ -107,7 +113,7 @@ const Subjects = {
         const onclick = link.getAttribute('onclick') || '';
         const href = link.getAttribute('href') || '';
         for (const text of [onclick, href].filter(Boolean)) {
-          const m1 = text.match(/showSubjectDetail\(\s*(\d+)/);
+          const m1 = text.match(/showSubjectDetail\(\s*'?(\d+)/);
           if (m1) { detailId = m1[1]; break; }
           const m2 = text.match(/viewSubject\([^)]*,\s*(\d+)\s*\)/);
           if (m2) { detailId = m2[1]; break; }
@@ -120,7 +126,7 @@ const Subjects = {
       }
       if (!detailId) {
         const html = row.innerHTML;
-        const m = html.match(/showSubjectDetail\(\s*(\d+)/);
+        const m = html.match(/showSubjectDetail\(\s*'?(\d+)/);
         if (m) detailId = m[1];
       }
 

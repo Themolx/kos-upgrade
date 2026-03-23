@@ -33,10 +33,14 @@ const Schedule = {
         if (listek.querySelector('.kos-parity')) return;
         const m = detail.textContent.match(/Týden výuky:\s*(lichý|sudý|každý)/i);
         if (!m || m[1].toLowerCase() === 'každý') return;
-        const isActive = (m[1].toLowerCase() === 'lichý') === isOdd;
+        const parityType = m[1].toLowerCase();
+        const isActive = (parityType === 'lichý') === isOdd;
+        const shortLabel = parityType === 'lichý' ? 'L' : 'S';
+        const fullLabel = isActive ? `${m[1]} — tento týden` : `${m[1]} — příští týden`;
         listek.appendChild(KOS.el('div', {
-          className: `kos-parity kos-parity--${isActive ? 'active' : 'inactive'}`
-        }, isActive ? 'tento týden' : 'příští týden'));
+          className: `kos-parity kos-parity--${isActive ? 'active' : 'inactive'}`,
+          title: fullLabel
+        }, shortLabel));
         if (!isActive) listek.classList.add('kos-dimmed');
       });
     });
@@ -125,6 +129,9 @@ const Schedule = {
       }
       if (dayIdx < 0 || dayIdx > 4) return;
 
+      // Parse poznámka for deferred start dates (e.g. "začne 30.3.2026")
+      const detailText = detail.textContent;
+
       // Parse each subject row in the collision table
       detail.querySelectorAll('tr').forEach(row => {
         const cells = row.querySelectorAll('td.ttSubjectRow1');
@@ -140,14 +147,30 @@ const Schedule = {
         let parity = 'každý';
         if (weekEl) {
           const weeks = weekEl.textContent.trim();
-          // If weeks are specified, store them as-is for filtering
           parity = `týdny:${weeks}`;
+        }
+
+        // Check poznámka for this subject — look for "začne DD.MM.YYYY" near the code
+        let startDate = '';
+        const codeEsc = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const startRe = new RegExp(codeEsc + '[\\s\\S]{0,300}začne\\s+(\\d{1,2}\\.\\d{1,2}\\.\\d{4})|začne\\s+(\\d{1,2}\\.\\d{1,2}\\.\\d{4})[\\s\\S]{0,300}' + codeEsc, 'i');
+        const startMatch = detailText.match(startRe);
+        if (startMatch) startDate = startMatch[1] || startMatch[2];
+
+        // Also check for teaching week numbers: "t: 8,9,10,11,12,13,14"
+        const poznamkaCell = cells.length > 5 ? cells[cells.length - 1] : null;
+        const poznamka = poznamkaCell ? poznamkaCell.textContent.trim() : '';
+        const weekMatch = poznamka.match(/t:\s*([\d,\s]+)/);
+        if (weekMatch && parity === 'každý') {
+          parity = `týdny:${weekMatch[1].replace(/\s/g, '')}`;
         }
 
         const key = `${dayIdx}-${code}-${time}-${parity}`;
         if (seen.has(key)) return;
         seen.add(key);
-        entries.push({ day: dayIdx, code, name, time, room, parity });
+        const entry = { day: dayIdx, code, name, time, room, parity };
+        if (startDate) entry.startDate = startDate;
+        entries.push(entry);
       });
     });
 

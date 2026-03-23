@@ -255,6 +255,8 @@
 }
 .kos-nav-compact__link:last-child { border-right: none; }
 .kos-nav-compact__link:hover { background: #e3f2fd; }
+.kos-nav-compact__link--home { font-weight: 700; background: #f0fafb; }
+.kos-nav-global { margin-bottom: 8px; }
 
 /* ── Misc ── */
 .kos-muted { color: #999; font-style: italic; font-size: 12px; }
@@ -268,12 +270,13 @@
 
 /* ── Schedule page ── */
 .kos-parity {
-  position: absolute; bottom: 2px; left: 2px; right: 2px;
-  font-size: 9px; font-weight: 600; padding: 1px 4px; text-align: center;
+  position: absolute; top: 2px; right: 2px;
+  font-size: 9px; font-weight: 700; padding: 0 4px; line-height: 16px;
+  border-radius: 3px; text-align: center; cursor: default;
   font-family: system-ui, sans-serif;
 }
-.kos-parity--active { background: rgba(46, 125, 50, 0.15); color: #2e7d32; }
-.kos-parity--inactive { background: rgba(0, 0, 0, 0.06); color: #999; }
+.kos-parity--active { background: #2e7d32; color: #fff; }
+.kos-parity--inactive { background: rgba(0, 0, 0, 0.08); color: #999; }
 .kos-dimmed { opacity: 0.3 !important; }
 .kos-today-day { background: #e3f2fd !important; font-weight: 700 !important; }
 
@@ -404,6 +407,19 @@
   padding: 20px; text-align: center; color: #999; font-size: 13px;
 }
 
+/* Syllabus schedule (parsed dates/teachers) */
+.kos-syllabus-schedule { display: flex; flex-direction: column; gap: 0; margin-bottom: 8px; }
+.kos-schedule-item {
+  display: grid; grid-template-columns: 60px 1fr; gap: 4px 10px;
+  padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; line-height: 1.5;
+}
+.kos-schedule-item:last-child { border-bottom: none; }
+.kos-schedule-item:hover { background: #f8f8f8; }
+.kos-schedule-date { font-weight: 700; color: #01747b; white-space: nowrap; }
+.kos-schedule-teacher { font-weight: 600; color: #555; grid-column: 2; }
+.kos-schedule-topic { color: #333; grid-column: 2; }
+.kos-schedule-note { padding: 4px 8px; font-size: 12px; color: #888; font-style: italic; }
+
 @media (max-width: 800px) {
   .kos-bottom-row { grid-template-columns: 1fr; }
   .kos-topbar { flex-direction: column; align-items: flex-start; gap: 4px; }
@@ -454,15 +470,9 @@
 @keyframes kos-slide-in { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .kos-toast__title { font-weight: 700; font-size: 14px; color: #01747b; margin-bottom: 8px; }
 .kos-toast__item { padding: 4px 0; border-top: 1px solid #eee; }
-.kos-toast__item--hot { background: #fffbe6; margin: 2px -8px; padding: 4px 8px; border-radius: 4px; border-top-color: transparent; }
-.kos-toast__badge { display: inline-block; background: #f59e0b; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
 .kos-toast__meta { color: #888; font-size: 11px; }
 .kos-toast__close { position: absolute; top: 8px; right: 10px; background: none; border: none; font-size: 18px; cursor: pointer; color: #999; line-height: 1; }
 .kos-toast__close:hover { color: #333; }
-
-/* Interest highlight for modules */
-.kos-mod-row--interest { background: #fffbe6 !important; border-left: 3px solid #f59e0b; }
-.kos-interest-badge { display: inline-block; background: #f59e0b; color: #fff; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
 
 @media (max-width: 450px) {
   .kos-grid__block-name { font-size: 8px; }
